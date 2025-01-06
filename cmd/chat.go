@@ -1,20 +1,29 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"strings"
+	"time"
 
+	"github.com/gotd/contrib/middleware/ratelimit"
+	"github.com/gotd/td/telegram"
 	"github.com/spf13/cobra"
+	"golang.org/x/time/rate"
 
 	"github.com/iyear/tdl/app/chat"
-	"github.com/iyear/tdl/pkg/logger"
+	"github.com/iyear/tdl/core/logctx"
+	"github.com/iyear/tdl/core/storage"
 )
+
+var limiter = ratelimit.New(rate.Every(500*time.Millisecond), 2)
 
 func NewChat() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "chat",
-		Short: "A set of chat tools",
+		Use:     "chat",
+		Short:   "A set of chat tools",
+		GroupID: groupTools.ID,
 	}
 
 	cmd.AddCommand(NewChatList(), NewChatExport(), NewChatUsers())
@@ -29,7 +38,9 @@ func NewChatList() *cobra.Command {
 		Use:   "ls",
 		Short: "List your chats",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return chat.List(logger.Named(cmd.Context(), "ls"), opts)
+			return tRun(cmd.Context(), func(ctx context.Context, c *telegram.Client, kvd storage.Storage) error {
+				return chat.List(logctx.Named(ctx, "ls"), c, kvd, opts)
+			}, limiter)
 		},
 	}
 
@@ -72,7 +83,9 @@ func NewChatExport() *cobra.Command {
 				return fmt.Errorf("unknown export type: %s", opts.Type)
 			}
 
-			return chat.Export(logger.Named(cmd.Context(), "export"), &opts)
+			return tRun(cmd.Context(), func(ctx context.Context, c *telegram.Client, kvd storage.Storage) error {
+				return chat.Export(logctx.Named(ctx, "export"), c, kvd, opts)
+			}, limiter)
 		},
 	}
 
@@ -125,7 +138,9 @@ func NewChatUsers() *cobra.Command {
 		Use:   "users",
 		Short: "export users from (protected) channels",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return chat.Users(logger.Named(cmd.Context(), "users"), opts)
+			return tRun(cmd.Context(), func(ctx context.Context, c *telegram.Client, kvd storage.Storage) error {
+				return chat.Users(logctx.Named(ctx, "users"), c, kvd, opts)
+			}, limiter)
 		},
 	}
 
